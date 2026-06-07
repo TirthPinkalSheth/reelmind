@@ -1,0 +1,8 @@
+﻿anthropic
+chromadb
+pandas
+sentence-transformers
+streamlit
+python-dotenv
+groq
+google-genai
