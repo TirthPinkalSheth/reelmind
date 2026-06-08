@@ -8,14 +8,17 @@ st.set_page_config(
     layout="centered"
 )
 
-# Auto-build ChromaDB FIRST before importing query
-if not os.path.exists("./chroma_db"):
-    with st.spinner("Building movie database for first time... please wait ~1 minute."):
-        df = load_and_clean("data/movies.csv")
-        embed_and_store(df)
-    st.rerun()
+# Build ChromaDB if it doesn't exist
+if "db_ready" not in st.session_state:
+    st.session_state.db_ready = False
 
-# Only import after ChromaDB exists
+if not st.session_state.db_ready:
+    if not os.path.exists("./chroma_db"):
+        with st.spinner("Building movie database for first time... please wait ~1 minute."):
+            df = load_and_clean("data/movies.csv")
+            embed_and_store(df)
+    st.session_state.db_ready = True
+
 from query import answer
 
 st.title("🎬 ReelMind")
