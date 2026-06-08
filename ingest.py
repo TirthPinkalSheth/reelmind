@@ -1,56 +1,66 @@
-import os
+﻿import os
 import pandas as pd
-import chromadb
 from sentence_transformers import SentenceTransformer
-CSV_PATH    = "data/movies.csv"
-CHROMA_PATH = "./chroma_db"
-COLLECTION  = "reelmind"
+from pinecone import Pinecone, ServerlessSpec
+from dotenv import load_dotenv
+
+load_dotenv()
+
 EMBED_MODEL = "all-MiniLM-L6-v2"
-def load_and_clean(path: str) -> pd.DataFrame:
+INDEX_NAME = "reelmind"
+
+def load_and_clean(path="data/movies.csv"):
     df = pd.read_csv(path)
-    print("Columns:", list(df.columns))
-    print("Total rows:", len(df)) 
-    df['cast'] = df['Star1'] + ', ' + df['Star2'] + ', ' + df['Star3'] + ', ' + df['Star4'] # Combine star columns into one as a cast
-    df.rename(columns={
-        'Series_Title': 'title',
-        'Released_Year': 'year',
-        'Genre': 'genre',
-        'IMDB_Rating': 'rating',
-        'Overview': 'plot',
-        'Director': 'director'
-    }, inplace=True)
-    df.dropna(subset=['title', 'plot'], inplace=True) #drop empty columns
-    df = df.fillna({col: ("Unknown" if df[col].dtype == object or str(df[col].dtype) == 'string' else 0) for col in df.columns}) # Fill any remaining empty string field with "Unknown"
-    print("Clean rows:", len(df))
+    df = df.dropna(subset=["Series_Title", "Overview"])
+    df = df.reset_index(drop=True)
     return df
-def build_chunk(row: pd.Series) -> str:
-    #The above fnc takes movie rows and converts into a single rich text block for embedding
-    return f"""Title: {row['title']}
-Year: {row['year']}
-Director: {row['director']}
-Cast: {row['cast']}
-Genre: {row['genre']}
-IMDb Rating: {row['rating']}
-Plot: {str(row['plot'])[:500]}""".strip()
-def embed_and_store(df: pd.DataFrame) -> None:
-    #This function takes the cleaned dataframe, embeds all chunks, and saves them to ChromaDB.
-    print(f"Loading embedding model: {EMBED_MODEL} ...")
+
+def embed_and_store(df):
+    print("Loading embedding model...")
     model = SentenceTransformer(EMBED_MODEL)
-    chunks = df.apply(build_chunk, axis=1).tolist()
-    ids = [f"movie_{i}" for i in range(len(chunks))]
-    print(f"Embedding {len(chunks)} movies ...")
-    embeddings = model.encode(chunks, show_progress_bar=True).tolist()
-    client = chromadb.PersistentClient(path=CHROMA_PATH)
-    try:
-        client.delete_collection(COLLECTION)
-        print("Cleared existing collection.")
-    except Exception:
-        pass
-    collection = client.create_collection(COLLECTION)
-    collection.add(documents=chunks, embeddings=embeddings, ids=ids)
-    print(f"Done — {len(chunks)} movies stored in ChromaDB.")
+
+    print("Embedding movies...")
+    texts = (df["Series_Title"] + ". " + df["Overview"]).tolist()
+    embeddings = model.encode(texts, show_progress_bar=True)
+
+    print("Connecting to Pinecone...")
+    pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+
+    if INDEX_NAME not in pc.list_indexes().names():
+        print("Creating index...")
+        pc.create_index(
+            name=INDEX_NAME,
+            dimension=384,
+            metric="cosine",
+            spec=ServerlessSpec(cloud="aws", region="us-east-1")
+        )
+
+    index = pc.Index(INDEX_NAME)
+
+    print("Uploading vectors...")
+    batch_size = 100
+    for i in range(0, len(df), batch_size):
+        batch = df.iloc[i:i+batch_size]
+        batch_embeddings = embeddings[i:i+batch_size]
+        vectors = [
+            (
+                str(i + j),
+                batch_embeddings[j].tolist(),
+                {
+                    "title": str(batch.iloc[j]["Series_Title"]),
+                    "overview": str(batch.iloc[j]["Overview"]),
+                    "year": str(batch.iloc[j].get("Released_Year", "")),
+                    "rating": str(batch.iloc[j].get("IMDB_Rating", "")),
+                    "genre": str(batch.iloc[j].get("Genre", "")),
+                }
+            )
+            for j in range(len(batch))
+        ]
+        index.upsert(vectors=vectors)
+        print(f"Uploaded {min(i+batch_size, len(df))}/{len(df)}")
+
+    print("Done! All movies uploaded to Pinecone.")
+
 if __name__ == "__main__":
-    if not os.path.exists(CSV_PATH):
-        raise FileNotFoundError(f"CSV not found at {CSV_PATH}")
-    df = load_and_clean(CSV_PATH)
+    df = load_and_clean("data/movies.csv")
     embed_and_store(df)

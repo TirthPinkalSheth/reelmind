@@ -1,54 +1,56 @@
 ﻿import os
-import chromadb
 from sentence_transformers import SentenceTransformer
-from dotenv import load_dotenv
+from pinecone import Pinecone
 from groq import Groq
+from dotenv import load_dotenv
 
 load_dotenv()
 
-CHROMA_PATH = "./chroma_db"
-COLLECTION  = "reelmind"
 EMBED_MODEL = "all-MiniLM-L6-v2"
-TOP_K       = 10
+INDEX_NAME = "reelmind"
+TOP_K = 10
 
 _embed_model = None
-_chroma_client = None
-_collection = None
+_index = None
 _client = None
 
 def _init():
-    global _embed_model, _chroma_client, _collection, _client
+    global _embed_model, _index, _client
     if _client is None:
         _embed_model = SentenceTransformer(EMBED_MODEL)
-        _chroma_client = chromadb.PersistentClient(path=CHROMA_PATH)
-        _collection = _chroma_client.get_collection(COLLECTION)
+        pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+        _index = pc.Index(INDEX_NAME)
         _client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-def retrieve(question: str) -> list:
+def retrieve(question):
     _init()
-    query_vector = _embed_model.encode([question]).tolist()
-    results = _collection.query(query_embeddings=query_vector, n_results=TOP_K)
-    return results["documents"][0]
+    embedding = _embed_model.encode(question).tolist()
+    results = _index.query(vector=embedding, top_k=TOP_K, include_metadata=True)
+    chunks = []
+    for match in results["matches"]:
+        meta = match["metadata"]
+        chunks.append(f"{meta['title']} ({meta['year']}) - Rating: {meta['rating']}\nGenre: {meta['genre']}\n{meta['overview']}")
+    return chunks
 
-def generate(question: str, chunks: list) -> str:
+def generate(question, chunks):
     _init()
-    context = "\n\n---\n\n".join(chunks)
-    prompt = f"""You are ReelMind, an intelligent movie assistant.
-Answer the user's question using ONLY the movie data provided below.
-Be conversational, specific, and helpful.
-If the answer is not in the context say: I don't have enough data on that, try rephrasing!
-Do NOT invent movie details, cast members, or ratings.
-Movie Context:
+    context = "\n\n".join(chunks)
+    prompt = f"""You are a movie expert. Use the following movies to answer the question.
+
+Movies:
 {context}
-User Question: {question}
-Answer:"""
+
+Question: {question}
+
+Give a helpful, specific answer based on the movies above."""
+
     response = _client.chat.completions.create(
         model="llama-3.3-70b-versatile",
-        messages=[{"role": "user", "content": prompt}]
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=1000
     )
     return response.choices[0].message.content
 
-def answer(question: str) -> str:
+def answer(question):
     chunks = retrieve(question)
-    result = generate(question, chunks)
-    return result
+    return generate(question, chunks)

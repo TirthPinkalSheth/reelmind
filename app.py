@@ -1,25 +1,7 @@
-﻿import os
-import streamlit as st
-from ingest import load_and_clean, embed_and_store
-
-st.set_page_config(
-    page_title="ReelMind",
-    page_icon="🎬",
-    layout="centered"
-)
-
-# Build ChromaDB if it doesn't exist
-if "db_ready" not in st.session_state:
-    st.session_state.db_ready = False
-
-if not st.session_state.db_ready:
-    if not os.path.exists("./chroma_db"):
-        with st.spinner("Building movie database for first time... please wait ~1 minute."):
-            df = load_and_clean("data/movies.csv")
-            embed_and_store(df)
-    st.session_state.db_ready = True
-
+﻿import streamlit as st
 from query import answer
+
+st.set_page_config(page_title="ReelMind", page_icon="🎬", layout="centered")
 
 st.title("🎬 ReelMind")
 st.caption("Intelligent movie search — powered by RAG + Llama AI")
