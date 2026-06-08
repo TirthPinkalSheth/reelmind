@@ -1,4 +1,4 @@
-import os
+﻿import os
 import chromadb
 from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
@@ -35,13 +35,12 @@ def generate(question: str, chunks: list) -> str:
     context = "\n\n---\n\n".join(chunks)
     prompt = f"""You are ReelMind, an intelligent movie assistant.
 Answer the user's question using ONLY the movie data provided below.
-Be helpful, specific, and mention movie titles, ratings, directors, and cast where relevant.
-
+Be conversational, specific, and helpful.
+If the answer is not in the context say: I don't have enough data on that, try rephrasing!
+Do NOT invent movie details, cast members, or ratings.
 Movie Context:
 {context}
-
 User Question: {question}
-
 Answer:"""
     response = _client.chat.completions.create(
         model="llama-3.3-70b-versatile",
