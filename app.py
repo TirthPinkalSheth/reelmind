@@ -1,7 +1,6 @@
-import os
+﻿import os
 import streamlit as st
 from ingest import load_and_clean, embed_and_store
-from query import answer
 
 st.set_page_config(
     page_title="ReelMind",
@@ -9,17 +8,19 @@ st.set_page_config(
     layout="centered"
 )
 
-# Auto-build ChromaDB if it doesn't exist (runs on Streamlit Cloud first load)
+# Auto-build ChromaDB FIRST before importing query
 if not os.path.exists("./chroma_db"):
     with st.spinner("Building movie database for first time... please wait ~1 minute."):
         df = load_and_clean("data/movies.csv")
         embed_and_store(df)
     st.rerun()
 
+# Only import after ChromaDB exists
+from query import answer
+
 st.title("🎬 ReelMind")
 st.caption("Intelligent movie search — powered by RAG + Llama AI")
 st.divider()
-
 st.markdown("**💡 Try asking:**")
 
 examples = [
@@ -29,7 +30,6 @@ examples = [
     "Which movie has the highest IMDb rating?",
 ]
 
-# Session state to persist selected example across rerenders
 if "question_input" not in st.session_state:
     st.session_state.question_input = ""
 
