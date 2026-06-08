@@ -20,7 +20,12 @@ def embed_and_store(df):
     model = SentenceTransformer(EMBED_MODEL)
 
     print("Embedding movies...")
-    texts = (df["Series_Title"] + ". " + df["Overview"]).tolist()
+    texts = (
+        df["Series_Title"] + ". " +
+        "Director: " + df.get("Director", pd.Series([""] * len(df))).fillna("") + ". " +
+        "Genre: " + df.get("Genre", pd.Series([""] * len(df))).fillna("") + ". " +
+        df["Overview"]
+    ).tolist()
     embeddings = model.encode(texts, show_progress_bar=True)
 
     print("Connecting to Pinecone...")
@@ -52,6 +57,7 @@ def embed_and_store(df):
                     "year": str(batch.iloc[j].get("Released_Year", "")),
                     "rating": str(batch.iloc[j].get("IMDB_Rating", "")),
                     "genre": str(batch.iloc[j].get("Genre", "")),
+                    "director": str(batch.iloc[j].get("Director", "")),
                 }
             )
             for j in range(len(batch))
@@ -59,7 +65,7 @@ def embed_and_store(df):
         index.upsert(vectors=vectors)
         print(f"Uploaded {min(i+batch_size, len(df))}/{len(df)}")
 
-    print("Done! All movies uploaded to Pinecone.")
+    print("Done!")
 
 if __name__ == "__main__":
     df = load_and_clean("data/movies.csv")

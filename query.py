@@ -29,7 +29,7 @@ def retrieve(question):
     chunks = []
     for match in results["matches"]:
         meta = match["metadata"]
-        chunks.append(f"{meta['title']} ({meta['year']}) - Rating: {meta['rating']}\nGenre: {meta['genre']}\n{meta['overview']}")
+        chunks.append(f"{meta['title']} ({meta['year']}) - Director: {meta.get('director','N/A')} - Rating: {meta['rating']}\nGenre: {meta['genre']}\n{meta['overview']}")
     return chunks
 
 def generate(question, chunks):
