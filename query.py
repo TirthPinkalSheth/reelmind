@@ -48,6 +48,7 @@ Give a helpful, specific answer based on the movies above."""
         model="qwen/qwen3.6-27b",
         messages=[{"role": "user", "content": prompt}],
         max_tokens=1000
+        reasoning_effort="none"
     )
     return response.choices[0].message.content
 
