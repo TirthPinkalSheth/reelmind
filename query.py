@@ -45,7 +45,7 @@ Question: {question}
 Give a helpful, specific answer based on the movies above."""
 
     response = _client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
+        model="qwen/qwen3.6-27b",
         messages=[{"role": "user", "content": prompt}],
         max_tokens=1000
     )
